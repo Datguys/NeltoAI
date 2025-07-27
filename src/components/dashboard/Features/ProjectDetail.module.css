@@ -1,0 +1,105 @@
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2.5rem 1rem;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.title {
+  font-size: 2.25rem;
+  font-weight: bold;
+  flex: 1;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.statusBadge {
+  font-size: 1rem;
+  padding: 0.5rem 1.25rem;
+  border-radius: 9999px;
+  text-transform: capitalize;
+}
+
+.bubbles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 2.5rem;
+}
+
+.bubble {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 9999px;
+  font-weight: 500;
+  font-size: 1rem;
+  background: var(--bubble-bg, #f4f4f5);
+  color: var(--bubble-fg, #27272a);
+  box-shadow: 0 2px 8px 0 rgba(0,0,0,0.04);
+  min-width: 110px;
+  justify-content: center;
+  border: none;
+}
+
+.bubbleYellow {
+  --bubble-bg: #fde68a;
+  --bubble-fg: #92400e;
+}
+.bubbleBlue {
+  --bubble-bg: #93c5fd;
+  --bubble-fg: #1e3a8a;
+}
+.bubbleGreen {
+  --bubble-bg: #bbf7d0;
+  --bubble-fg: #166534;
+}
+.bubblePurple {
+  --bubble-bg: #ddd6fe;
+  --bubble-fg: #6d28d9;
+}
+.bubbleTag {
+  --bubble-bg: #f3f4f6;
+  --bubble-fg: #0369a1;
+  font-size: 0.85rem;
+  padding: 0.5rem 1.25rem;
+}
+
+.tabsList {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  margin-bottom: 1.5rem;
+  width: 100%;
+}
+
+.cardSection {
+  margin-bottom: 2rem;
+}
+
+@media (max-width: 700px) {
+  .container {
+    padding: 1.5rem 0.25rem;
+  }
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  .title {
+    font-size: 1.5rem;
+  }
+  .bubbles {
+    gap: 0.5rem;
+  }
+  .bubble {
+    font-size: 0.95rem;
+    padding: 0.5rem 1rem;
+  }
+}

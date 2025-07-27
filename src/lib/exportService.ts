@@ -1,0 +1,434 @@
+// Export service for business plans and reports
+import { BusinessPlanSection, ExportRequest } from './schemas';
+import { BusinessPlanBuilderService } from './aiServices';
+import { getAICompletion } from './ai';
+
+export interface ExportOptions {
+  format: 'pdf' | 'docx' | 'html' | 'json';
+  includeSections: string[];
+  includeCharts: boolean;
+  includeFinancials: boolean;
+  templateStyle: 'professional' | 'modern' | 'creative';
+  customBranding: boolean;
+  companyName?: string;
+  companyLogo?: string;
+}
+
+export class ExportService {
+  static async exportBusinessPlan(
+    projectId: string,
+    userId: string,
+    options: ExportOptions
+  ): Promise<{ downloadUrl: string; filename: string }> {
+    try {
+      // Get all sections for the project
+      const sections = await BusinessPlanBuilderService.getProjectSections(projectId);
+      
+      // Filter sections based on options
+      const sectionsToInclude = options.includeSections.length > 0
+        ? sections.filter(s => options.includeSections.includes(s.section_id))
+        : sections.filter(s => s.completion_status === 'completed');
+
+      // Generate the document based on format
+      switch (options.format) {
+        case 'pdf':
+          return await this.generatePDF(sectionsToInclude, options);
+        case 'docx':
+          return await this.generateDOCX(sectionsToInclude, options);
+        case 'html':
+          return await this.generateHTML(sectionsToInclude, options);
+        case 'json':
+          return await this.generateJSON(sectionsToInclude, options);
+        default:
+          throw new Error('Unsupported export format');
+      }
+    } catch (error) {
+      console.error('Export failed:', error);
+      throw error;
+    }
+  }
+
+  private static async generatePDF(
+    sections: BusinessPlanSection[],
+    options: ExportOptions
+  ): Promise<{ downloadUrl: string; filename: string }> {
+    // Use React-PDF to generate PDF
+    const content = await this.compileSections(sections, options);
+    
+    const pdfContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Business Plan</title>
+        <style>
+          ${this.getStylesheet(options.templateStyle)}
+        </style>
+      </head>
+      <body>
+        ${content}
+      </body>
+      </html>
+    `;
+
+    // In a real implementation, you would:
+    // 1. Use a PDF generation library like Puppeteer or jsPDF
+    // 2. Upload to cloud storage
+    // 3. Return the download URL
+    
+    // For now, return a mock URL
+    const filename = `business-plan-${Date.now()}.pdf`;
+    const blob = new Blob([pdfContent], { type: 'text/html' });
+    const downloadUrl = URL.createObjectURL(blob);
+    
+    return { downloadUrl, filename };
+  }
+
+  private static async generateDOCX(
+    sections: BusinessPlanSection[],
+    options: ExportOptions
+  ): Promise<{ downloadUrl: string; filename: string }> {
+    const content = await this.compileSections(sections, options);
+    
+    // In a real implementation, use libraries like docx.js
+    const filename = `business-plan-${Date.now()}.docx`;
+    const blob = new Blob([content], { type: 'text/plain' });
+    const downloadUrl = URL.createObjectURL(blob);
+    
+    return { downloadUrl, filename };
+  }
+
+  private static async generateHTML(
+    sections: BusinessPlanSection[],
+    options: ExportOptions
+  ): Promise<{ downloadUrl: string; filename: string }> {
+    const content = await this.compileSections(sections, options);
+    
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Business Plan - ${options.companyName || 'My Company'}</title>
+        <style>
+          ${this.getStylesheet(options.templateStyle)}
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          ${options.customBranding && options.companyLogo ? `
+            <div class="header">
+              <img src="${options.companyLogo}" alt="Company Logo" class="logo">
+              <h1>${options.companyName}</h1>
+            </div>
+          ` : ''}
+          
+          <div class="title-page">
+            <h1>Business Plan</h1>
+            <h2>${options.companyName || 'My Company'}</h2>
+            <p class="date">Generated on ${new Date().toLocaleDateString()}</p>
+          </div>
+          
+          <div class="table-of-contents">
+            <h2>Table of Contents</h2>
+            <ul>
+              ${sections.map(section => `
+                <li>
+                  <a href="#section-${section.section_number}-${section.subsection_number}">
+                    ${section.section_number}.${section.subsection_number} ${section.subsection_title}
+                  </a>
+                </li>
+              `).join('')}
+            </ul>
+          </div>
+          
+          ${content}
+          
+          <div class="footer">
+            <p>Generated by Founder Launch Platform</p>
+            <p>© ${new Date().getFullYear()} - AI-Powered Business Planning</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const filename = `business-plan-${Date.now()}.html`;
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const downloadUrl = URL.createObjectURL(blob);
+    
+    return { downloadUrl, filename };
+  }
+
+  private static async generateJSON(
+    sections: BusinessPlanSection[],
+    options: ExportOptions
+  ): Promise<{ downloadUrl: string; filename: string }> {
+    const exportData = {
+      metadata: {
+        generatedAt: new Date().toISOString(),
+        exportOptions: options,
+        version: '1.0'
+      },
+      businessPlan: {
+        sections: sections.map(section => ({
+          sectionNumber: section.section_number,
+          subsectionNumber: section.subsection_number,
+          title: section.section_title,
+          subtitle: section.subsection_title,
+          content: section.raw_content,
+          enhancedContent: section.ai_enhanced_content,
+          contentType: section.content_type,
+          completionStatus: section.completion_status,
+          wordCount: section.word_count,
+          dataSources: section.data_sources_used,
+          modificationHistory: section.modification_history
+        }))
+      }
+    };
+
+    const jsonContent = JSON.stringify(exportData, null, 2);
+    const filename = `business-plan-${Date.now()}.json`;
+    const blob = new Blob([jsonContent], { type: 'application/json' });
+    const downloadUrl = URL.createObjectURL(blob);
+    
+    return { downloadUrl, filename };
+  }
+
+  private static async compileSections(
+    sections: BusinessPlanSection[],
+    options: ExportOptions
+  ): Promise<string> {
+    // Sort sections by section and subsection number
+    const sortedSections = sections.sort((a, b) => {
+      if (a.section_number !== b.section_number) {
+        return a.section_number - b.section_number;
+      }
+      return a.subsection_number - b.subsection_number;
+    });
+
+    let currentSectionNumber = 0;
+    let compiledContent = '';
+
+    for (const section of sortedSections) {
+      // Add section header if this is a new section
+      if (section.section_number !== currentSectionNumber) {
+        currentSectionNumber = section.section_number;
+        compiledContent += `
+          <div class="section-break"></div>
+          <h1 class="section-title">${section.section_number}. ${section.section_title}</h1>
+        `;
+      }
+
+      // Add subsection
+      compiledContent += `
+        <div class="subsection" id="section-${section.section_number}-${section.subsection_number}">
+          <h2 class="subsection-title">
+            ${section.section_number}.${section.subsection_number} ${section.subsection_title}
+          </h2>
+          <div class="content">
+            ${this.formatContent(section.ai_enhanced_content || section.raw_content)}
+          </div>
+        </div>
+      `;
+    }
+
+    return compiledContent;
+  }
+
+  private static formatContent(content: string): string {
+    // Convert markdown-style content to HTML
+    return content
+      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+      .replace(/^\* (.+)$/gm, '<li>$1</li>')
+      .replace(/^- (.+)$/gm, '<li>$1</li>')
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      .replace(/\n\n/g, '</p><p>')
+      .replace(/^(.+)$/gm, '<p>$1</p>')
+      .replace(/<li>/g, '<ul><li>')
+      .replace(/<\/li>(?!\s*<li>)/g, '</li></ul>');
+  }
+
+  private static getStylesheet(templateStyle: string): string {
+    const baseStyles = `
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: 'Georgia', serif; line-height: 1.6; color: #333; }
+      .container { max-width: 8.5in; margin: 0 auto; padding: 1in; }
+      .header { text-align: center; margin-bottom: 2rem; border-bottom: 2px solid #ddd; padding-bottom: 1rem; }
+      .logo { max-height: 80px; margin-bottom: 1rem; }
+      .title-page { text-align: center; margin: 3rem 0; page-break-after: always; }
+      .title-page h1 { font-size: 2.5rem; margin-bottom: 1rem; }
+      .title-page h2 { font-size: 1.8rem; color: #666; margin-bottom: 2rem; }
+      .date { font-style: italic; color: #888; }
+      .table-of-contents { margin: 2rem 0; page-break-after: always; }
+      .table-of-contents h2 { border-bottom: 1px solid #ddd; padding-bottom: 0.5rem; }
+      .table-of-contents ul { list-style: none; padding-left: 0; }
+      .table-of-contents li { margin: 0.5rem 0; }
+      .table-of-contents a { text-decoration: none; color: #333; }
+      .section-break { page-break-before: always; }
+      .section-title { font-size: 1.8rem; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 0.5rem; margin: 2rem 0 1rem 0; }
+      .subsection { margin: 2rem 0; }
+      .subsection-title { font-size: 1.3rem; color: #34495e; margin-bottom: 1rem; }
+      .content { margin-left: 1rem; }
+      .content p { margin-bottom: 1rem; text-align: justify; }
+      .content h1, .content h2, .content h3 { margin: 1.5rem 0 0.5rem 0; color: #2c3e50; }
+      .content ul { margin: 1rem 0; padding-left: 2rem; }
+      .content li { margin-bottom: 0.5rem; }
+      .footer { text-align: center; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid #ddd; color: #888; }
+    `;
+
+    const styleVariations = {
+      professional: `
+        body { font-family: 'Times New Roman', serif; }
+        .section-title { color: #1a365d; border-bottom-color: #2d5a87; }
+        .subsection-title { color: #2d5a87; }
+      `,
+      modern: `
+        body { font-family: 'Arial', sans-serif; }
+        .section-title { color: #6366f1; border-bottom-color: #a855f7; }
+        .subsection-title { color: #7c3aed; }
+        .content { font-size: 0.95rem; }
+      `,
+      creative: `
+        body { font-family: 'Helvetica', sans-serif; }
+        .section-title { color: #059669; border-bottom-color: #10b981; }
+        .subsection-title { color: #047857; }
+        .title-page h1 { color: #059669; }
+      `
+    };
+
+    return baseStyles + (styleVariations[templateStyle as keyof typeof styleVariations] || '');
+  }
+
+  // AI-enhanced export with professional formatting
+  static async generateProfessionalExport(
+    projectId: string,
+    userId: string,
+    options: ExportOptions
+  ): Promise<{ downloadUrl: string; filename: string }> {
+    try {
+      const sections = await BusinessPlanBuilderService.getProjectSections(projectId);
+      
+      // Use AI to enhance the overall document coherence
+      const enhancedSections = await this.enhanceDocumentCoherence(sections, userId);
+      
+      // Generate executive summary if missing
+      const hasExecutiveSummary = enhancedSections.some(s => 
+        s.section_title.toLowerCase().includes('executive')
+      );
+      
+      if (!hasExecutiveSummary) {
+        const executiveSummary = await this.generateExecutiveSummary(enhancedSections, userId);
+        enhancedSections.unshift(executiveSummary);
+      }
+      
+      // Update options to include enhanced sections
+      const enhancedOptions = {
+        ...options,
+        includeSections: enhancedSections.map(s => s.section_id)
+      };
+      
+      return await this.exportBusinessPlan(projectId, userId, enhancedOptions);
+    } catch (error) {
+      console.error('Professional export failed:', error);
+      throw error;
+    }
+  }
+
+  private static async enhanceDocumentCoherence(
+    sections: BusinessPlanSection[],
+    userId: string
+  ): Promise<BusinessPlanSection[]> {
+    try {
+      const prompt = `Review this business plan structure and ensure coherence between sections:
+
+${sections.map(s => `${s.section_number}.${s.subsection_number} ${s.subsection_title}: ${s.raw_content.substring(0, 200)}...`).join('\n\n')}
+
+Identify any inconsistencies, gaps, or areas where sections don't flow well together. Provide specific recommendations for improving coherence.`;
+
+      const response = await getAICompletion({
+        messages: [
+          { role: 'system', content: 'You are a professional business plan editor ensuring document coherence and flow.' },
+          { role: 'user', content: prompt }
+        ],
+        max_tokens: 1000,
+        temperature: 0.3,
+        userKey: userId,
+        userId: userId
+      });
+
+      // In a real implementation, apply the AI suggestions to enhance sections
+      return sections;
+    } catch (error) {
+      console.error('Failed to enhance document coherence:', error);
+      return sections;
+    }
+  }
+
+  private static async generateExecutiveSummary(
+    sections: BusinessPlanSection[],
+    userId: string
+  ): Promise<BusinessPlanSection> {
+    try {
+      const businessContent = sections
+        .filter(s => s.completion_status === 'completed')
+        .map(s => `${s.subsection_title}: ${s.raw_content}`)
+        .join('\n\n');
+
+      const prompt = `Based on the following business plan content, generate a comprehensive executive summary:
+
+${businessContent}
+
+The executive summary should be 2-3 pages and include:
+1. Business overview and value proposition
+2. Market opportunity and target customers
+3. Competitive advantages
+4. Financial highlights and funding needs
+5. Management team overview
+6. Key success factors
+
+Write in a professional, compelling tone suitable for investors and stakeholders.`;
+
+      const summaryContent = await getAICompletion({
+        messages: [
+          { role: 'system', content: 'You are an expert business writer creating executive summaries for business plans.' },
+          { role: 'user', content: prompt }
+        ],
+        max_tokens: 1500,
+        temperature: 0.7,
+        userKey: userId,
+        userId: userId
+      });
+
+      return {
+        section_id: `exec_summary_${Date.now()}`,
+        project_id: sections[0]?.project_id || '',
+        section_number: 0,
+        subsection_number: 1,
+        section_title: 'Executive Summary',
+        subsection_title: 'Executive Summary',
+        content_type: 'ai_generated',
+        raw_content: summaryContent,
+        completion_status: 'completed',
+        word_count: summaryContent.split(' ').length,
+        data_sources_used: ['AI Generated'],
+        modification_history: [{
+          timestamp: new Date(),
+          change_type: 'created',
+          user_id: userId,
+          summary: 'AI-generated executive summary'
+        }],
+        required_fields: [],
+        completion_criteria: [],
+        estimated_time_to_complete: 0,
+        dependencies: []
+      };
+    } catch (error) {
+      console.error('Failed to generate executive summary:', error);
+      throw error;
+    }
+  }
+}
